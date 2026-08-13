@@ -80,19 +80,27 @@ async function main() {
   const nameWidth = Math.max(5, ...rows.map((r) => r.name.length));
   const totalVotes = Number(total);
 
+  // Work the leaders out here rather than asking the contract, so a tie can be
+  // reported honestly instead of being hidden by the lowest-id tie-break.
+  const topVotes = Math.max(...rows.map((r) => r.votes));
+  const leaders = rows.filter((r) => r.votes === topVotes);
+
   for (const row of rows) {
     const share = totalVotes === 0 ? 0 : Math.round((row.votes / totalVotes) * 20);
     const bar = "█".repeat(share).padEnd(20, "·");
+    const mark = totalVotes > 0 && row.votes === topVotes ? "◄" : " ";
     console.log(
-      `  ${String(row.id).padStart(2)}  ${row.name.padEnd(nameWidth)}  ${bar}  ${row.votes}`
+      `  ${String(row.id).padStart(2)}  ${row.name.padEnd(nameWidth)}  ${bar}  ${String(row.votes).padStart(3)} ${mark}`
     );
   }
 
-  if (totalVotes > 0) {
-    const winner = await view("winningTopicName", "string");
-    console.log(`\n  Winner: ${winner}`);
-  } else {
+  if (totalVotes === 0) {
     console.log("\n  No votes cast yet.");
+  } else if (leaders.length === 1) {
+    console.log(`\n  Winner: ${leaders[0].name} (${topVotes} of ${totalVotes})`);
+  } else {
+    const names = leaders.map((r) => r.name).join(", ");
+    console.log(`\n  Draw: ${names} — ${topVotes} vote(s) each`);
   }
 
   console.log(`\n  HashScan: https://hashscan.io/testnet/contract/${contractIdStr}`);

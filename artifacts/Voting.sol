@@ -198,14 +198,39 @@ contract Voting {
         return _tally[topicId];
     }
 
-    /// @notice The topic with the most votes. Ties resolve to the lowest id.
+    /**
+     * @notice The topic with the most votes.
+     * @dev ON A TIE THIS RETURNS THE LOWEST TIED ID. That is a deterministic
+     *      tie-break, not a majority — always check `isTie()` before presenting
+     *      this as the result.
+     */
     function winningTopicId() external view returns (uint256) {
         return _winningTopicId();
     }
 
-    /// @notice Name of the winning topic.
+    /// @notice Name of the leading topic. Same tie-break caveat as `winningTopicId`.
     function winningTopicName() external view returns (string memory) {
         return _topics[_winningTopicId()];
+    }
+
+    /// @notice Votes held by the leading topic (0 if nobody has voted).
+    function winningVoteCount() external view returns (uint256) {
+        return _tally[_winningTopicId()];
+    }
+
+    /**
+     * @notice True if two or more topics share the top score, so there is no
+     *         outright winner. Always false before the first vote is cast.
+     */
+    function isTie() external view returns (bool) {
+        uint256 best = _tally[_winningTopicId()];
+        if (best == 0) return false;
+
+        uint256 leaders;
+        for (uint256 i = 0; i < _tally.length; i++) {
+            if (_tally[i] == best) leaders++;
+        }
+        return leaders > 1;
     }
 
     /// @notice One printable result line, e.g. `"Pizza: 3"`.

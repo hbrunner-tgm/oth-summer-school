@@ -272,7 +272,8 @@ mode, so you get the error name instead of a bare `CONTRACT_REVERT_EXECUTED`.
 | `openVoting()` / `closeVoting()` | owner | phase transitions |
 | `vote(uint256 topicId)` | anyone eligible | `Open` only, once per address |
 | `topicCount()` `topicName(id)` `voteCount(id)` | anyone | `uint256` / `string` / `uint256` |
-| `totalVotes()` `winningTopicId()` `winningTopicName()` | anyone | ties resolve to the lowest id |
+| `totalVotes()` `winningTopicId()` `winningTopicName()` `winningVoteCount()` | anyone | on a tie, returns the **lowest tied id** — check `isTie()` first |
+| `isTie()` | anyone | `true` when two or more topics share the top score |
 | `resultLine(id)` | anyone | e.g. `"Pizza: 3"` |
 | `phaseName()` | anyone | `"Setup"` / `"Open"` / `"Closed"` |
 | `hasVoted(address)` `blacklisted(address)` `owner()` | anyone | public state |
