@@ -226,8 +226,9 @@ contract Voting {
         uint256 best = _tally[_winningTopicId()];
         if (best == 0) return false;
 
-        uint256 leaders;
-        for (uint256 i = 0; i < _tally.length; i++) {
+        uint256 leaders = 0;
+        uint256 tallyLength = _tally.length;
+        for (uint256 i = 0; i < tallyLength; i++) {
             if (_tally[i] == best) leaders++;
         }
         return leaders > 1;
@@ -264,7 +265,8 @@ contract Voting {
     function _winningTopicId() private view returns (uint256 winner) {
         uint256 best = _tally[0];
         winner = 0;
-        for (uint256 i = 1; i < _tally.length; i++) {
+        uint256 tallyLength = _tally.length;
+        for (uint256 i = 1; i < tallyLength; i++) {
             if (_tally[i] > best) {
                 best = _tally[i];
                 winner = i;
@@ -275,7 +277,7 @@ contract Voting {
     function _toString(uint256 value) private pure returns (string memory) {
         if (value == 0) return "0";
 
-        uint256 digits;
+        uint256 digits = 0;
         for (uint256 tmp = value; tmp != 0; tmp /= 10) {
             digits++;
         }
