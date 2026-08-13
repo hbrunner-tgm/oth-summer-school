@@ -5,11 +5,18 @@
   "type": "module",
   "main": "deploy.js",
   "scripts": {
+    "compile": "node compile.js",
     "deploy": "node deploy.js",
-    "call": "node call.js"
+    "call": "node call.js",
+    "accounts": "node accounts.js",
+    "results": "node results.js"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.62.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "js-sha3": "^0.8.0"
+  },
+  "devDependencies": {
+    "solc": "^0.8.26"
   }
 }

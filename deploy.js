@@ -8,6 +8,7 @@
  *   node deploy.js ./artifacts/MyContract.json
  *   node deploy.js ./build/MyContract.bin --gas 300000
  *   node deploy.js ./artifacts/MyToken.json --arg-string "MyToken" --arg-string "MTK" --arg-uint256 1000000
+ *   node deploy.js ./artifacts/Voting.json --gas 1000000 --arg-string-array "Pizza,Pasta,Sushi"
  *
  * Requires a .env file (see .env.example) with:
  *   HEDERA_OPERATOR_ID   e.g. 0.0.12345
@@ -83,7 +84,8 @@ function parseArgs(argv) {
   if (!file) {
     console.error(
       "Usage: node deploy.js <artifact-or-bin-file> [--gas N] [--memo TEXT] " +
-        "[--arg-string V] [--arg-address 0.0.x|0x..] [--arg-uint256 N] [--arg-bool true|false]"
+        "[--arg-string V] [--arg-string-array \"A,B,C\"] [--arg-address 0.0.x|0x..] " +
+        "[--arg-uint256 N] [--arg-bool true|false]"
     );
     process.exit(1);
   }
@@ -101,6 +103,14 @@ function parseArgs(argv) {
         break;
       case "--arg-string":
         opts.constructorArgs.push(["addString", rest[++i]]);
+        break;
+      case "--arg-string-array":
+        // Comma-separated list, e.g. --arg-string-array "Pizza,Pasta,Sushi".
+        // Individual entries therefore cannot contain a comma.
+        opts.constructorArgs.push([
+          "addStringArray",
+          rest[++i].split(",").map((s) => s.trim()),
+        ]);
         break;
       case "--arg-address":
         opts.constructorArgs.push(["addAddress", toEvmAddress(rest[++i])]);
