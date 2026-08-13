@@ -46,6 +46,12 @@ contract Voting {
         Closed
     }
 
+    /// @dev Name and running total together, so they cannot drift apart.
+    struct Topic {
+        string name;
+        uint256 votes;
+    }
+
     /* ------------------------------------------------------------------ */
     /* Errors — cheaper than require-strings and unambiguous in a trace     */
     /* ------------------------------------------------------------------ */
@@ -85,8 +91,7 @@ contract Voting {
     /// @notice True if `account` is barred from voting.
     mapping(address => bool) public blacklisted;
 
-    string[] private _topics;
-    uint256[] private _tally; // parallel to _topics
+    Topic[] private _topics;
 
     /* ------------------------------------------------------------------ */
     /* Modifiers                                                           */
@@ -102,6 +107,11 @@ contract Voting {
         _;
     }
 
+    modifier validTopic(uint256 topicId) {
+        if (topicId >= _topics.length) revert InvalidTopic(topicId);
+        _;
+    }
+
     /* ------------------------------------------------------------------ */
     /* Construction                                                        */
     /* ------------------------------------------------------------------ */
@@ -113,10 +123,14 @@ contract Voting {
         if (topics_.length == 0) revert NoTopics();
 
         owner = msg.sender;
-        _topics = topics_;
-        _tally = new uint256[](topics_.length);
-        phase = Phase.Setup;
 
+        // A string[] in memory cannot be assigned straight into a Topic[] in
+        // storage, so build the array one entry at a time.
+        for (uint256 i = 0; i < topics_.length; i++) {
+            _topics.push(Topic({name: topics_[i], votes: 0}));
+        }
+
+        phase = Phase.Setup;
         emit PhaseChanged(Phase.Setup);
     }
 
@@ -157,22 +171,22 @@ contract Voting {
 
     /**
      * @notice Cast your single vote for `topicId`.
-     * @dev Reverts if voting is not open, the caller is blacklisted, the caller
-     *      has already voted, or the topic does not exist.
+     * @dev Reverts if voting is not open, the topic does not exist, the caller
+     *      is blacklisted, or the caller has already voted.
      */
-    function vote(uint256 topicId) external inPhase(Phase.Open) {
+    function vote(uint256 topicId)
+        external
+        inPhase(Phase.Open)
+        validTopic(topicId)
+    {
         if (blacklisted[msg.sender]) revert AccountIsBlacklisted();
         if (hasVoted[msg.sender]) revert AlreadyVoted();
-        if (topicId >= _topics.length) revert InvalidTopic(topicId);
 
         // Effects before the tally update.
         hasVoted[msg.sender] = true;
 
-        unchecked {
-            // Bounded by the number of accounts; cannot realistically overflow.
-            _tally[topicId] += 1;
-            totalVotes += 1;
-        }
+        _topics[topicId].votes++;
+        totalVotes++;
 
         emit VoteCast(msg.sender, topicId);
     }
@@ -187,15 +201,23 @@ contract Voting {
     }
 
     /// @notice Name of topic `topicId`.
-    function topicName(uint256 topicId) external view returns (string memory) {
-        if (topicId >= _topics.length) revert InvalidTopic(topicId);
-        return _topics[topicId];
+    function topicName(uint256 topicId)
+        external
+        view
+        validTopic(topicId)
+        returns (string memory)
+    {
+        return _topics[topicId].name;
     }
 
     /// @notice Votes cast for topic `topicId`.
-    function voteCount(uint256 topicId) external view returns (uint256) {
-        if (topicId >= _topics.length) revert InvalidTopic(topicId);
-        return _tally[topicId];
+    function voteCount(uint256 topicId)
+        external
+        view
+        validTopic(topicId)
+        returns (uint256)
+    {
+        return _topics[topicId].votes;
     }
 
     /**
@@ -205,17 +227,20 @@ contract Voting {
      *      this as the result.
      */
     function winningTopicId() external view returns (uint256) {
-        return _winningTopicId();
+        (uint256 id, , ) = _leader();
+        return id;
     }
 
     /// @notice Name of the leading topic. Same tie-break caveat as `winningTopicId`.
     function winningTopicName() external view returns (string memory) {
-        return _topics[_winningTopicId()];
+        (uint256 id, , ) = _leader();
+        return _topics[id].name;
     }
 
     /// @notice Votes held by the leading topic (0 if nobody has voted).
     function winningVoteCount() external view returns (uint256) {
-        return _tally[_winningTopicId()];
+        (, uint256 best, ) = _leader();
+        return best;
     }
 
     /**
@@ -223,21 +248,19 @@ contract Voting {
      *         outright winner. Always false before the first vote is cast.
      */
     function isTie() external view returns (bool) {
-        uint256 best = _tally[_winningTopicId()];
-        if (best == 0) return false;
-
-        uint256 leaders = 0;
-        uint256 tallyLength = _tally.length;
-        for (uint256 i = 0; i < tallyLength; i++) {
-            if (_tally[i] == best) leaders++;
-        }
-        return leaders > 1;
+        (, uint256 best, uint256 leaders) = _leader();
+        return best > 0 && leaders > 1;
     }
 
     /// @notice One printable result line, e.g. `"Pizza: 3"`.
-    function resultLine(uint256 topicId) external view returns (string memory) {
-        if (topicId >= _topics.length) revert InvalidTopic(topicId);
-        return string.concat(_topics[topicId], ": ", _toString(_tally[topicId]));
+    function resultLine(uint256 topicId)
+        external
+        view
+        validTopic(topicId)
+        returns (string memory)
+    {
+        Topic storage topic = _topics[topicId];
+        return string.concat(topic.name, ": ", _toString(topic.votes));
     }
 
     /// @notice Current phase as text: `"Setup"`, `"Open"` or `"Closed"`.
@@ -262,14 +285,29 @@ contract Voting {
     /* Internals                                                           */
     /* ------------------------------------------------------------------ */
 
-    function _winningTopicId() private view returns (uint256 winner) {
-        uint256 best = _tally[0];
-        winner = 0;
-        uint256 tallyLength = _tally.length;
-        for (uint256 i = 1; i < tallyLength; i++) {
-            if (_tally[i] > best) {
-                best = _tally[i];
-                winner = i;
+    /**
+     * @dev One pass over the tally answering every result question at once:
+     *      which topic leads, its score, and how many topics share that score.
+     *      Keeping this in a single place is what stops `isTie()` and
+     *      `winningTopicId()` from ever disagreeing.
+     *
+     *      Ties resolve to the lowest id because the leader only changes on a
+     *      strictly greater score.
+     */
+    function _leader()
+        private
+        view
+        returns (uint256 id, uint256 best, uint256 leaders)
+    {
+        uint256 length = _topics.length;
+        for (uint256 i = 0; i < length; i++) {
+            uint256 votes = _topics[i].votes;
+            if (votes > best) {
+                best = votes;
+                id = i;
+                leaders = 1;
+            } else if (votes == best) {
+                leaders++;
             }
         }
     }

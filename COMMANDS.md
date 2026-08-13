@@ -17,8 +17,9 @@ sees as `msg.sender`):
 
 **Legend**
 
-- 🟢 **free** — a query, no HBAR spent, no ledger state changed
-- 🔵 **costs gas** — a transaction
+- 🟢 **cheap** — a query: answered by one node, changes no state, and costs a
+  small query fee rather than gas (not literally free, but ~1000× cheaper)
+- 🔵 **costs gas** — a real transaction that goes through consensus
 - ⚠️ **one-way** — cannot be undone on this deployment
 - 🆕 **needs a fresh deploy** — the current contract is past the phase this needs
 
@@ -129,7 +130,7 @@ npm run accounts
 node call.js --method whoAmI --mode query --as voter1 --return address
 ```
 
-🟢 Free, and it returns the same answer as the paid version:
+🟢 A query, and it returns the same answer as the transaction version:
 
 ```bash
 node call.js --method whoAmI --mode execute --as voter1 --return address
@@ -209,9 +210,16 @@ node call.js --method openVoting --mode execute --return null
 node call.js --method topicName --uint256 99 --return string
 ```
 
-→ `InvalidTopic(99)  [0xcf9ce92c]` — 🟢 free, since it's a view function.
+→ `InvalidTopic(99)  [0xcf9ce92c]` — 🟢 a query, since it's a view function, so
+no gas is burned even though it reverts.
 
 Phase numbers in `WrongPhase(required, current)`: **0 = Setup, 1 = Open, 2 = Closed**.
+
+**Which error wins.** Only the *first* failing check reports, and `vote()` checks
+in this order: phase → topic id → blacklist → already-voted. Both the phase and
+topic-id checks are modifiers, so they run before the function body. An account
+that has already voted and passes a bad topic id gets `InvalidTopic`, not
+`AlreadyVoted`.
 
 ---
 
