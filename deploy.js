@@ -207,16 +207,19 @@ async function main() {
   const params = buildConstructorParams(opts.constructorArgs);
   if (params) flow.setConstructorParameters(params);
 
-  const txResponse = await flow.execute(client);
-
   let receipt;
   try {
+    const txResponse = await flow.execute(client);
     receipt = await txResponse.getReceipt(client);
   } catch (err) {
-    // A constructor can revert (e.g. NoTopics()). Pull the record anyway so we
-    // can name the error instead of printing a bare status.
+    // A constructor can revert (e.g. NoTopics()). ContractCreateFlow validates
+    // the receipt internally, so the throw can come from either call above —
+    // either way the error carries the transaction id, so fetch the record and
+    // name the error instead of printing a bare status.
+    if (!err.transactionId) throw err;
+
     const record = await new TransactionRecordQuery()
-      .setTransactionId(txResponse.transactionId)
+      .setTransactionId(err.transactionId)
       .setValidateReceiptStatus(false)
       .execute(client);
 
@@ -224,7 +227,9 @@ async function main() {
       record.contractFunctionResult?.errorMessage,
       loadErrorSelectors()
     );
-    throw new Error(`${err.status?.toString() ?? "FAILED"} — constructor reverted: ${reason}`);
+    throw new Error(
+      `${err.status?.toString() ?? "FAILED"} — constructor reverted: ${reason}`
+    );
   }
 
   const contractId = receipt.contractId;

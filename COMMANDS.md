@@ -297,6 +297,27 @@ address. A silent, total bypass of the security control, with no error anywhere.
 
 This is why `whoAmI()` exists.
 
+**Already done for you on `0.0.10045338`**, so you can show it without spending
+a deploy:
+
+```bash
+node call.js --contract 0.0.10045338 --method blacklisted --address 0.0.10027089 --return bool
+```
+
+→ `true` (the long-zero form is blacklisted)
+
+```bash
+node call.js --contract 0.0.10045338 --method blacklisted --address 0x826aeb65840e04a0d23cb4e8d26dd4403bd5722e --return bool
+```
+
+→ `false` (the alias — the form the contract actually checks — is not)
+
+```bash
+node call.js --contract 0.0.10045338 --method hasVoted --address 0x826aeb65840e04a0d23cb4e8d26dd4403bd5722e --return bool
+```
+
+→ `true`. The "blacklisted" account voted.
+
 ### D5. Un-blacklisting
 
 On a Setup-phase contract, the flag goes both ways:
@@ -311,8 +332,13 @@ node call.js --contract 0.0.NEW --method setBlacklisted --mode execute --address
 node deploy.js ./artifacts/Voting.json --gas 3000000 --arg-string-array ""
 ```
 
-→ deployment fails, `NoTopics()` — the constructor refuses to create a vote
-nobody can participate in.
+→ the deploy fails before a contract exists:
+
+```
+❌ Deployment error: CONTRACT_REVERT_EXECUTED — constructor reverted: NoTopics()  [0xb50bca14]
+```
+
+The constructor refuses to create a vote nobody can participate in.
 
 ### D7. A single-topic vote
 

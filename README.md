@@ -192,9 +192,13 @@ Confirm the real one straight from the contract:
 node call.js --method whoAmI --mode execute --as voter1 --return address
 ```
 
-Use `--mode execute`: the transaction record shows the definitive `msg.sender`.
-In a Testnet run with a portal ECDSA account, `whoAmI()` returned the **alias**
-address, not the long-zero one — so that is the form to blacklist.
+`--mode query` is free and gives the same answer (`call.js` sets the query's
+sender account); use `--mode execute` only if you want it recorded on-ledger.
+
+In Testnet runs with portal ECDSA accounts, `whoAmI()` returned the **alias**
+address, not the long-zero one — so that is the form to blacklist. Getting this
+wrong is a silent bypass, not an error: see test D4 in
+[COMMANDS.md](COMMANDS.md).
 
 ## 4. Blacklist, then open voting
 
