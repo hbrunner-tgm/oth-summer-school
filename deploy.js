@@ -24,8 +24,10 @@ import {
   AccountId,
   ContractCreateFlow,
   ContractFunctionParameters,
+  TransactionRecordQuery,
   Hbar,
 } from "@hashgraph/sdk";
+import { describeRevert, loadErrorSelectors } from "./call.js";
 
 /* ------------------------------------------------------------------ */
 /* 1. Read the compiled bytecode                                       */
@@ -104,14 +106,17 @@ function parseArgs(argv) {
       case "--arg-string":
         opts.constructorArgs.push(["addString", rest[++i]]);
         break;
-      case "--arg-string-array":
+      case "--arg-string-array": {
         // Comma-separated list, e.g. --arg-string-array "Pizza,Pasta,Sushi".
         // Individual entries therefore cannot contain a comma.
+        // An empty string means an empty array (useful for testing NoTopics()).
+        const raw = rest[++i];
         opts.constructorArgs.push([
           "addStringArray",
-          rest[++i].split(",").map((s) => s.trim()),
+          raw === "" ? [] : raw.split(",").map((s) => s.trim()),
         ]);
         break;
+      }
       case "--arg-address":
         opts.constructorArgs.push(["addAddress", toEvmAddress(rest[++i])]);
         break;
@@ -203,7 +208,24 @@ async function main() {
   if (params) flow.setConstructorParameters(params);
 
   const txResponse = await flow.execute(client);
-  const receipt = await txResponse.getReceipt(client);
+
+  let receipt;
+  try {
+    receipt = await txResponse.getReceipt(client);
+  } catch (err) {
+    // A constructor can revert (e.g. NoTopics()). Pull the record anyway so we
+    // can name the error instead of printing a bare status.
+    const record = await new TransactionRecordQuery()
+      .setTransactionId(txResponse.transactionId)
+      .setValidateReceiptStatus(false)
+      .execute(client);
+
+    const reason = describeRevert(
+      record.contractFunctionResult?.errorMessage,
+      loadErrorSelectors()
+    );
+    throw new Error(`${err.status?.toString() ?? "FAILED"} — constructor reverted: ${reason}`);
+  }
 
   const contractId = receipt.contractId;
   if (!contractId) {
